@@ -4,7 +4,7 @@ export type ValidationResult =
   | { ok: true }
   | { ok: false; errors: Record<string, string> };
 
-export async function validateWithAIOrLocal(fields: Record<string, string>, pdfText: string): Promise<ValidationResult> {
+export async function validateWithAI(fields: Record<string, string>, pdfText: string): Promise<ValidationResult> {
   const webhook = process.env.AI_WEBHOOK_URL?.trim();
   if (webhook) {
     try {

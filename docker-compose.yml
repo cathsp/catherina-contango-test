@@ -16,6 +16,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   backend:
     build: ./backend
@@ -32,17 +33,20 @@ services:
       - uploads:/app/uploads
     ports:
       - "4000:4000"
+    restart: unless-stopped
 
   frontend:
     build: ./frontend
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL}
       BACKEND_URL: ${BACKEND_URL}
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL}
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     ports:
       - "3000:3000"
+    restart: unless-stopped
 
 volumes:
   db_data:

@@ -1,24 +1,30 @@
-# Backend Dockerfile
+# ---- deps ----
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* package-lock.json* yarn.lock* ./
-# Use npm to keep it simple; replace with pnpm if preferred
+# Use npm for simplicity
 RUN if [ -f package-lock.json ]; then npm ci; else npm i --production=false; fi
 
-FROM node:20-alpine AS builder
+# ---- build ----
+FROM node:20-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Generate Prisma client & build TS
 RUN npx prisma generate
 RUN npm run build
 
+# ---- run ----
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/prisma ./prisma
-# ensure uploads dir exists
-RUN mkdir -p /app/uploads
+# Copy runtime artifacts
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+# Entrypoint
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh && mkdir -p /app/uploads
 EXPOSE 4000
-CMD ["node", "dist/index.js"]
+ENTRYPOINT ["sh", "./entrypoint.sh"]
+    

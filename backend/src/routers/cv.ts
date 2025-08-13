@@ -2,9 +2,14 @@ import { publicProcedure, router } from "../trpc.js";
 import { z } from "zod";
 import fs from "fs/promises";
 import path from "path";
-import pdfParse from "pdf-parse";
-import { validateWithAIOrLocal } from "../ai/validate.js";
+// @ts-ignore
+import pdfPkg from "pdf-parse-fixed";
+import { validateWithAI } from "../ai/validate.js";
 import { prisma } from "../db.js";
+
+// normalize default/namespace export
+const pdfParse: (data: Buffer | Uint8Array, opts?: any) => Promise<{ text: string }> =
+  (pdfPkg as any).default ?? (pdfPkg as any);
 
 const inputSchema = z.object({
   fullName: z.string().min(2),
@@ -18,13 +23,29 @@ const inputSchema = z.object({
 export const cvRouter = router({
   validateAndSave: publicProcedure
     .input(inputSchema)
-    .mutation( async ({ input }) => {
-      // Load uploaded PDF by token
+    .mutation(async ({ input }) => {
+      // Resolve uploaded file path
       const dir = process.env.UPLOAD_DIR || path.join(process.cwd(), "uploads");
       const filePath = path.join(dir, input.fileToken);
-      const buff = await fs.readFile(filePath);
-      const pdfData = await pdfParse(buff);
-      const pdfText = pdfData.text || "";
+
+      // Load PDF as a Buffer and parse
+      let pdfText = "";
+      try {
+        const buff = await fs.readFile(filePath);
+        const parsed = await pdfParse(buff);
+        pdfText = (parsed?.text || "").toString();
+      } catch (err: any) {
+        // Provide clearer errors to the UI
+        return {
+          ok: false as const,
+          errors: {
+            file:
+              err?.code === "ENOENT"
+                ? "Uploaded file not found on server."
+                : `Failed to parse PDF: ${err?.message || "Unknown error"}`,
+          },
+        };
+      }
 
       const fields = {
         fullName: input.fullName,
@@ -34,8 +55,11 @@ export const cvRouter = router({
         experience: input.experience || "",
       };
 
-      const result = await validateWithAIOrLocal(fields, pdfText);
-
+      const result = await validateWithAI(fields, pdfText);
+      // console.log("--Result--")
+      // console.log(result)
+      // console.log(fields)
+      // console.log(pdfText)
       if (!result.ok) {
         return { ok: false as const, errors: result.errors };
       }
